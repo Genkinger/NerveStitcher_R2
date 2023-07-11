@@ -13,25 +13,25 @@ def check_monotonically_increase(parameter_tup):
 
     a, b, c = parameter_tup
     if c == 0:
-        if a >= 0 and a + 2 * b >= 0 and not(a == 0 and b == 0):
+        if a >= 0 and a + 2 * b >= 0 and not (a == 0 and b == 0):
             return True
         return False
     if c < 0:
-        if b**2 > 3 * a * c:
-            q_plus = (-2 * b + math.sqrt(4 * b**2 - 12 * a * c)) / (6 * c)
-            q_minus = (-2 * b - math.sqrt(4 * b**2 - 12 * a * c)) / (6 * c)
+        if b ** 2 > 3 * a * c:
+            q_plus = (-2 * b + math.sqrt(4 * b ** 2 - 12 * a * c)) / (6 * c)
+            q_minus = (-2 * b - math.sqrt(4 * b ** 2 - 12 * a * c)) / (6 * c)
             if q_plus <= 0 and q_minus >= 1:
                 return True
         return False
     if c > 0:
-        if b**2 < 3 * a * c:
+        if b ** 2 < 3 * a * c:
             return True
-        elif b**2 == 3 * a * c:
+        elif b ** 2 == 3 * a * c:
             if b >= 0 or 3 * c + b <= 0:
                 return True
         else:
-            q_plus = (-2 * b + math.sqrt(4 * b**2 - 12 * a * c)) / (6 * c)
-            q_minus = (-2 * b - math.sqrt(4 * b**2 - 12 * a * c)) / (6 * c)
+            q_plus = (-2 * b + math.sqrt(4 * b ** 2 - 12 * a * c)) / (6 * c)
+            q_minus = (-2 * b - math.sqrt(4 * b ** 2 - 12 * a * c)) / (6 * c)
             if q_plus <= 0 or q_minus >= 1:
                 return True
         return False
@@ -60,7 +60,7 @@ def calc_discrete_entropy(cm_x, cm_y, max_distance, parameter_tup, im, distance)
             count += 1
 
             # evaluate the gain function and adjust pixel luminance value
-            g = 1 + a * r**2 + b * r**4 + c * r**6
+            g = 1 + a * r ** 2 + b * r ** 4 + c * r ** 6
             intensity = im[j, i] * g
 
             # map the luminance value to the corresponding histogram bins
@@ -153,12 +153,12 @@ def vignetting_correction(im):
     cm_x = 192
     cm_y = 192
     max_distance = math.sqrt(max(
-        (vertex[0] - cm_x)**2 + (vertex[1] - cm_y)**2 for vertex in [[0, 0], [0, row], [col, 0], [col, row]]))
+        (vertex[0] - cm_x) ** 2 + (vertex[1] - cm_y) ** 2 for vertex in [[0, 0], [0, row], [col, 0], [col, row]]))
 
     distance = []
     for i in range(col):
         for j in range(row):
-            distance.append(math.sqrt((i - cm_x)**2 + (j - cm_y)**2))
+            distance.append(math.sqrt((i - cm_x) ** 2 + (j - cm_y) ** 2))
 
     # a, b, c, x, y = find_parameters(cm_x, cm_y, max_distance, imgray, distance)
     a, b, c = 0.0625, 1.75, -0.75
@@ -170,43 +170,35 @@ def vignetting_correction(im):
         for y in range(row):
             r = distance[count] / max_distance
             count += 1
-            g = 1 + a * r**2 + b * r**4 + c * r**6
+            g = 1 + a * r ** 2 + b * r ** 4 + c * r ** 6
             modified = imgray[y, x] * g
             # # if the brightness after modification is greater than 255, then set the brightness to 255
-            # if modified > 255:
-            #     modified = 255
-            # imgray[y, x] = modified
             imgray[y, x] = modified if modified < 255 else 255
     tb = time.time()
     print("xy耗时：{0}".format(tb - ta))
     return imgray
 
 
-if __name__ == '__main__':
+def do_vignetting_correction(reference_image_path, image_directory, output_directory):
     t1 = time.time()
-    path = r'data/test/image'
-    savepath = r"data/test/stitch_img"
-    reference_img = cv2.imread('data/reference.jpg')
-    filelist = os.listdir(path)
-    filelist.sort(key=lambda x: int(x[4:-4]))  # 从正数第四个字符到倒数第四个字符中间的数字排序
+    reference_img = cv2.imread(reference_image_path)
+    reference_histogram = ExactHistogramMatcher.get_histogram(reference_img)
+    filelist = [filename for filename in os.listdir(image_directory) if
+                filename.endswith(".jpg") or filename.endswith(".tif")]
     num = 0
+    t4 = 0
     for filename in filelist:
-        img = cv2.imread(os.path.join(path, filename))
+        img = cv2.imread(os.path.join(image_directory, filename))
         # 直方图规定化
         t2 = time.time()
-        reference_histogram = ExactHistogramMatcher.get_histogram(reference_img)
         img = ExactHistogramMatcher.match_image_to_histogram(img, reference_histogram)
         img = img.astype(np.uint8)
         # 渐晕校正
         t3 = time.time()
         img = vignetting_correction(img)
-        cv2.imwrite(savepath + "/" + os.path.basename(filename), img)
+        cv2.imwrite(os.path.join(output_directory, os.path.basename(filename)), img)
         num += 1
         t4 = time.time()
-        print("已处理成功：", num)
-        print("规定化耗时：{0}".format(t3-t2), "渐晕耗时：{0}".format(t4-t3))
-    print("共处理：", num, "张图片","共耗时：{0}".format(t4-t1))
-
-
-
-
+        print(f"Successfully corrected: {num}")
+        print(f"Matching：{t3 - t2}", f"Vignetting：{t4 - t3}")
+    print(f"Prepared {num} Images, Total Time：{t4 - t1}")
