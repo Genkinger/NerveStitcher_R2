@@ -1,9 +1,8 @@
 import numpy as np
 import cv2
-import os
-
+from os.path import join
 from PIL import Image
-from pathlib import Path
+
 
 def calculate_img_size(x_move, y_move):
     '''
@@ -31,12 +30,12 @@ def calculate_img_size(x_move, y_move):
     sum_x = abs(x_max) + abs(x_min)
     sum_y = abs(y_max) + abs(y_min)
 
-    if x_min< 0 and x_max > 0:
+    if x_min < 0 and x_max > 0:
         x = sum_x - abs(x_min)
     else:
         x = x_max
 
-    if y_min< 0 and y_max > 0:
+    if y_min < 0 and y_max > 0:
         y = sum_y - abs(y_min)
     else:
         y = y_max
@@ -70,7 +69,7 @@ def combine_first_img(img, bg_img, x, y):
     return center_point, bg_img
 
 
-def combine_image(input_dir, bg_img, count, x_move, y_move, center_point):
+def combine_image(input_directory, stitching_pairs, bg_img, count, x_move, y_move, center_point, output_directory):
     '''
     count:拼接图像计数器，用于拼接失败时断续重拼，防止pairs重复读取.txt文件之前的图像
 
@@ -81,38 +80,32 @@ def combine_image(input_dir, bg_img, count, x_move, y_move, center_point):
     ④左上移动时，从(sum_x, 0)开始，x逐渐减小，y逐渐减小 ----> x_move[i]取反,y_move[i]取反
     总结：x_move[i]取反,y_move[i]取反
     '''
-    if not os.path.exists(input_dir + '/result/'):
-        os.makedirs(input_dir + '/result/')
-
-    input_pairs_path = input_dir + "stitching_list.txt"
-    with open(input_pairs_path, 'r') as f:
-        pairs = [l.split() for l in f.readlines()]
     p = count
     for i in range(len(x_move)):
-        temp_count, pair = list(enumerate(pairs))[count + i]
-        # print(temp_count, pair)
-        name0, name1 = pair[:2]
+        temp_count, (_, image) = list(enumerate(stitching_pairs))[count + i]
+
         # 只需要list中第二列图像(待拼接图像)
-        img1 = cv2.imread(input_dir + '%s' % name1)
+        img1 = cv2.imread(join(input_directory, f"{image}"))
         img1 = Image.fromarray(np.uint8(img1))
         bg_img = Image.fromarray(np.uint8(bg_img))
-        center_point[0] += -np.int(x_move[i])
-        center_point[1] += -np.int(y_move[i])
+        center_point[0] += -int(x_move[i])
+        center_point[1] += -int(y_move[i])
         bg_img.paste(img1, (center_point[0], center_point[1]))
         bg_img = np.asarray(bg_img)  # 得到拼接图像
         p = temp_count
 
-        cv2.imwrite(input_dir + '/result/result%i.jpg' % temp_count, bg_img)
+        cv2.imwrite(join(output_directory, f"result{i}.jpg"), bg_img)
 
     count = p + 2  # 从0开始+1，跳过错误拼接组+1，共+2
 
     return count, bg_img
 
 
-def combine(img_first_stitching, x_move, y_move, input_dir, count):
+def combine(img_first_stitching, x_move, y_move, input_directory, stitching_pairs, count, output_directory):
     sum_x, sum_y, x, y = calculate_img_size(x_move, y_move)
     bg_img = create_img([384, 384], sum_x, sum_y)
     center_point, bg_img = combine_first_img(img_first_stitching, bg_img, x, y)
-    count, result_img = combine_image(input_dir, bg_img, count, x_move, y_move, center_point)
+    count, result_img = combine_image(input_directory, stitching_pairs, bg_img, count, x_move, y_move, center_point,
+                                      output_directory)
 
     return count, result_img
