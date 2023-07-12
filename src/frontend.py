@@ -1,9 +1,11 @@
 import os
 import sys
 
-from stitching import do_stitching, StitcherConfig
+
+from main import do_stitching, Config
 from preprocessing.vignetting_correction import do_vignetting_correction
 import argparse
+from util.metrics import print_metrics
 
 
 class Frontend(object):
@@ -36,21 +38,20 @@ class Frontend(object):
             description="Runs the final stitching on the given input directory"
         )
         parser.add_argument("-i", "--input_directory", required=True)
-        parser.add_argument("-o", "--final_stitch_directory", required=True)
-        parser.add_argument("-s", "--intermediate_stitch_directory", required=True)
+        parser.add_argument("-o", "--output_directory", required=True)
         parser.add_argument("-m", "--matching_threshold", required=False, default=0.80)
         parser.add_argument("-k", "--keypoint_threshold", required=False, default=0.005)
         parser.add_argument("-n", "--nms_radius", required=False, default=4)
 
         arguments = parser.parse_args(sys.argv[2:])
 
-        stitcher_config = StitcherConfig(input_image_directory=arguments.input_directory,
-                                         final_stitch_output_directory=arguments.final_stitch_directory,
-                                         intermediate_stitch_output_directory=arguments.intermediate_stitch_directory,
+        stitcher_config = Config(input_directory=arguments.input_directory,
+                                         output_directory=arguments.output_directory,
                                          match_threshold=arguments.matching_threshold,
                                          nms_radius=arguments.nms_radius,
                                          keypoint_threshold=arguments.keypoint_threshold)
         do_stitching(stitcher_config)
+        print_metrics(True)
 
 
 Frontend()
