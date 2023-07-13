@@ -3,7 +3,7 @@ from os.path import join, normpath, basename, exists
 from os import listdir, makedirs
 
 import numpy as np
-from src.util.metrics import capture_timing_info, print_metrics
+from src.util.metrics import capture_timing_info
 
 
 @capture_timing_info()

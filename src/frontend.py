@@ -1,10 +1,8 @@
 import os
 import sys
-
-
-from main import do_stitching, Config
-from preprocessing.vignetting_correction import do_vignetting_correction
 import argparse
+from main import do_stitching_naive, Config
+from preprocessing.vignetting_correction import do_vignetting_correction
 from util.metrics import print_metrics
 
 
@@ -32,6 +30,7 @@ class Frontend(object):
             os.makedirs(arguments.output_directory)
 
         do_vignetting_correction(arguments.referece, arguments.input_directory, arguments.output_directory)
+        print_metrics(True)
 
     def stitch(self):
         parser = argparse.ArgumentParser(
@@ -46,11 +45,11 @@ class Frontend(object):
         arguments = parser.parse_args(sys.argv[2:])
 
         stitcher_config = Config(input_directory=arguments.input_directory,
-                                         output_directory=arguments.output_directory,
-                                         match_threshold=arguments.matching_threshold,
-                                         nms_radius=arguments.nms_radius,
-                                         keypoint_threshold=arguments.keypoint_threshold)
-        do_stitching(stitcher_config)
+                                 output_directory=arguments.output_directory,
+                                 match_threshold=float(arguments.matching_threshold),
+                                 nms_radius=int(arguments.nms_radius),
+                                 keypoint_threshold=float(arguments.keypoint_threshold))
+        do_stitching_naive(stitcher_config)
         print_metrics(True)
 
 

@@ -6,7 +6,7 @@ from os.path import join, exists
 
 from src.models.matching import Matching
 from src.models.utils import read_image
-from combine_img_legacy import combine
+from src.legacy.combine_img_legacy import combine
 
 torch.set_grad_enabled(False)
 

@@ -41,44 +41,69 @@
 # %BANNER_END%
 
 import torch
+from dataclasses import dataclass
+from .superpoint import SuperPoint, SuperPointInput, SuperPointOutput, SuperPointConfig
+from .superglue import SuperGlue, SuperGlueInput, SuperGlueOutput, SuperGlueConfig
 
-from .superpoint import SuperPoint
-from .superglue import SuperGlue
+
+@dataclass
+class MatchingInput:
+    image0: torch.Tensor
+    image1: torch.Tensor
+
+
+@dataclass
+class MatchingOutput:
+    keypoints0: torch.Tensor
+    keypoints1: torch.Tensor
+    matches0: torch.Tensor
+    matches1: torch.Tensor
+    matching_scores0: torch.Tensor
+    matching_scores1: torch.Tensor
 
 
 class Matching(torch.nn.Module):
     """ Image Matching Frontend (SuperPoint + SuperGlue) """
-    def __init__(self, config={}):
-        super().__init__()
-        self.superpoint = SuperPoint(config.get('superpoint', {}))
-        self.superglue = SuperGlue(config.get('superglue', {}))
 
-    def forward(self, data):
+    def __init__(self, superpoint_config: SuperPointConfig, superglue_config: SuperGlueConfig):
+        super().__init__()
+        self.superpoint = SuperPoint(superpoint_config)
+        self.superglue = SuperGlue(superglue_config)
+
+    def forward(self, data: MatchingInput):
         """ Run SuperPoint (optionally) and SuperGlue
         SuperPoint is skipped if ['keypoints0', 'keypoints1'] exist in input
         Args:
           data: dictionary with minimal keys: ['image0', 'image1']
         """
-        pred = {}
-
-        # Extract SuperPoint (keypoints, scores, descriptors) if not provided
-        if 'keypoints0' not in data:
-            pred0 = self.superpoint({'image': data['image0']})
-            pred = {**pred, **{k+'0': v for k, v in pred0.items()}}
-        if 'keypoints1' not in data:
-            pred1 = self.superpoint({'image': data['image1']})
-            pred = {**pred, **{k+'1': v for k, v in pred1.items()}}
+        super_point_result_0: SuperPointOutput = self.superpoint(SuperPointInput(image=data.image0))
+        super_point_result_1: SuperPointOutput = self.superpoint(SuperPointInput(image=data.image1))
 
         # Batch all features
         # We should either have i) one image per batch, or
         # ii) the same number of local features for all images in the batch.
-        data = {**data, **pred}
 
-        for k in data:
-            if isinstance(data[k], (list, tuple)):
-                data[k] = torch.stack(data[k])
+        superglue_input = SuperGlueInput(image0=data.image0,
+                                         image1=data.image1,
+                                         keypoints0=torch.zeros(1),
+                                         keypoints1=torch.zeros(1),
+                                         descriptors0=torch.zeros(1),
+                                         descriptors1=torch.zeros(1),
+                                         scores0=torch.zeros(1),
+                                         scores1=torch.zeros(1))
 
-        # Perform the matching
-        pred = {**pred, **self.superglue(data)}
+        superglue_input.descriptors0 = torch.stack(super_point_result_0.descriptors)
+        superglue_input.descriptors1 = torch.stack(super_point_result_1.descriptors)
+        superglue_input.keypoints0 = torch.stack(super_point_result_0.keypoints)
+        superglue_input.keypoints1 = torch.stack(super_point_result_1.keypoints)
+        superglue_input.scores0 = torch.stack(super_point_result_0.scores)
+        superglue_input.scores1 = torch.stack(super_point_result_1.scores)
 
-        return pred
+        superglue_result: SuperGlueOutput = self.superglue(superglue_input)
+
+        return MatchingOutput(keypoints0=superglue_input.keypoints0,
+                              keypoints1=superglue_input.keypoints1,
+                              matches0=superglue_result.matches0,
+                              matches1=superglue_result.matches1,
+                              matching_scores0=superglue_result.matching_scores0,
+                              matching_scores1=superglue_result.matching_scores1)
