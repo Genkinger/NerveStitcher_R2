@@ -70,3 +70,17 @@ If you use any ideas from the paper or code from this repo, please consider citi
 ## Copyright
 Do not use for commercial purposes without permission. <br>
 Copyright (c) 2022 TGU-UOW
+
+
+## TODOs
+- [] fully introduce static typing
+- [] refactor model internals
+- [] better cli
+- [] GUI
+- [] remove legacy code
+- [] implement alternative preprocessing steps
+- [] implement more robust stitching algorithm
+- [] implement offline stitching approach
+- [] implement artefact detection
+- [] implement artefact correction
+- [] implement piecewise stitching
