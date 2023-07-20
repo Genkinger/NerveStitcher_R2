@@ -4,6 +4,7 @@ import argparse
 from main import do_stitching_naive, Config
 from preprocessing.vignetting_correction import do_vignetting_correction
 from util.metrics import print_metrics
+from dataclasses import fields, MISSING
 
 
 class Frontend(object):
@@ -17,39 +18,22 @@ class Frontend(object):
 
         getattr(self, arguments.command)()
 
-    def vignetting_correction(self):
-        parser = argparse.ArgumentParser(
-            description="Runs Vignetting Correction on the images in the input_directory and stores the result in output_directory")
-        parser.add_argument("-i", "--input_directory", required=True)
-        parser.add_argument("-o", "--output_directory", required=True)
-        parser.add_argument("-r", "--reference", required=True,
-                            help="Path to a single reference image that is used to compute a reference histogram")
-        arguments = parser.parse_args(sys.argv[2:])
-
-        if not os.path.exists(arguments.output_directory):
-            os.makedirs(arguments.output_directory)
-
-        do_vignetting_correction(arguments.referece, arguments.input_directory, arguments.output_directory)
-        print_metrics(True)
+    @staticmethod
+    def create_arg_parser_from_dataclass(dataclass, **kwargs) -> argparse.ArgumentParser:
+        parser = argparse.ArgumentParser(**kwargs)
+        for x in fields(dataclass):
+            if x.default_factory is not MISSING:
+                parser.add_argument(f"--{x.name}", default=x.default_factory(), type=x.type)
+            else:
+                parser.add_argument(f"--{x.name}", default=x.default, type=x.type)
+        return parser
 
     def stitch(self):
-        parser = argparse.ArgumentParser(
-            description="Runs the final stitching on the given input directory"
-        )
-        parser.add_argument("-i", "--input_directory", required=True)
-        parser.add_argument("-o", "--output_directory", required=True)
-        parser.add_argument("-m", "--matching_threshold", required=False, default=0.80)
-        parser.add_argument("-k", "--keypoint_threshold", required=False, default=0.005)
-        parser.add_argument("-n", "--nms_radius", required=False, default=4)
-
+        parser = self.create_arg_parser_from_dataclass(
+            Config, description="Runs the final stitching on the given input directory")
         arguments = parser.parse_args(sys.argv[2:])
 
-        stitcher_config = Config(input_directory=arguments.input_directory,
-                                 output_directory=arguments.output_directory,
-                                 match_threshold=float(arguments.matching_threshold),
-                                 nms_radius=int(arguments.nms_radius),
-                                 keypoint_threshold=float(arguments.keypoint_threshold))
-        do_stitching_naive(stitcher_config)
+        do_stitching_naive(Config(**vars(arguments)))
         print_metrics(True)
 
 
