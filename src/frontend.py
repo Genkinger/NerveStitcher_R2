@@ -1,8 +1,6 @@
-import os
 import sys
 import argparse
 from main import do_stitching_naive, Config
-from preprocessing.vignetting_correction import do_vignetting_correction
 from util.metrics import print_metrics
 from dataclasses import fields, MISSING
 
@@ -21,11 +19,11 @@ class Frontend(object):
     @staticmethod
     def create_arg_parser_from_dataclass(dataclass, **kwargs) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(**kwargs)
-        for x in fields(dataclass):
-            if x.default_factory is not MISSING:
-                parser.add_argument(f"--{x.name}", default=x.default_factory(), type=x.type)
+        for field in fields(dataclass):
+            if field.default_factory is not MISSING:
+                parser.add_argument(f"--{field.name}", default=field.default_factory(), type=field.type)
             else:
-                parser.add_argument(f"--{x.name}", default=x.default, type=x.type)
+                parser.add_argument(f"--{field.name}", default=field.default, type=field.type)
         return parser
 
     def stitch(self):
