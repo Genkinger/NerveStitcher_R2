@@ -47,12 +47,13 @@ class Point:
 
 
 def frame_to_tensor(frame, device):
-    return torch.from_numpy(frame / 255.).float()[None, None].to(device)
+    return torch.from_numpy(frame / 255.).float()[None][None].to(device)
 
 
 @capture_timing_info()
-def generate_keypoints(matcher, image_a: numpy.ndarray, image_b: numpy.ndarray, device: str) -> tuple[
-    numpy.ndarray, numpy.ndarray]:
+def generate_keypoints(matcher, image_a: numpy.ndarray, image_b: numpy.ndarray, device: str) -> \
+        tuple[numpy.ndarray, numpy.ndarray]:
+
     tensor_a = frame_to_tensor(image_a, device)
     tensor_b = frame_to_tensor(image_b, device)
 

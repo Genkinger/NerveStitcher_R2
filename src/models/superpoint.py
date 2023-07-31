@@ -44,6 +44,7 @@ from pathlib import Path
 import torch
 from torch import nn
 from dataclasses import dataclass
+from matplotlib import pyplot as plt
 
 
 def simple_nms(scores, nms_radius: int):
@@ -106,7 +107,7 @@ class SuperPointConfig:
 @dataclass
 class SuperPointOutput:
     keypoints: list[torch.Tensor]
-    scores: tuple[torch.Tensor]
+    scores: list[torch.Tensor]
     descriptors: list[torch.Tensor]
 
 
@@ -148,7 +149,7 @@ class SuperPoint(nn.Module):
         self.convDb = nn.Conv2d(
             c5, self.config.descriptor_dim,
             kernel_size=1, stride=1, padding=0)
-
+        # TODO(Leah): Make this less weird, separate pure data from code
         path = Path(__file__).parent / 'weights/superpoint_v1.pth'
         self.load_state_dict(torch.load(str(path)))
 
@@ -158,7 +159,7 @@ class SuperPoint(nn.Module):
 
         print('Loaded SuperPoint model')
 
-    def forward(self, input) -> SuperPointOutput:
+    def forward(self, input: SuperPointInput) -> SuperPointOutput:
         """ Compute keypoints, scores, descriptors for image """
         # Shared Encoder
         x = self.relu(self.conv1a(input.image))
@@ -176,21 +177,28 @@ class SuperPoint(nn.Module):
         # Compute the dense keypoint scores
         cPa = self.relu(self.convPa(x))
         scores = self.convPb(cPa)
+
         scores = torch.nn.functional.softmax(scores, 1)[:, :-1]
-        b, _, h, w = scores.shape
-        scores = scores.permute(0, 2, 3, 1).reshape(b, h, w, 8, 8)
-        scores = scores.permute(0, 1, 3, 2, 4).reshape(b, h * 8, w * 8)
+
+        batch_size, _, height, width = scores.shape
+        scores = scores.permute(0, 2, 3, 1).reshape(batch_size, height, width, 8, 8)
+        scores = scores.permute(0, 1, 3, 2, 4).reshape(batch_size, height * 8, width * 8)
         scores = simple_nms(scores, self.config.nms_radius)
 
         # Extract keypoints
-        keypoints = [
-            torch.nonzero(s > self.config.keypoint_threshold)
-            for s in scores]
-        scores = [s[tuple(k.t())] for s, k in zip(scores, keypoints)]
+        keypoints = []
+        for s in scores:
+            keypoints.append(torch.nonzero(s > self.config.keypoint_threshold))
+
+        scrs = []
+        for s, k in zip(scores, keypoints):
+            index = tuple(k.t())
+            scrs.append(s[index])
+        scores = scrs
 
         # Discard keypoints near the image borders
         keypoints, scores = list(zip(*[
-            remove_borders(k, s, self.config.remove_borders, h * 8, w * 8)
+            remove_borders(k, s, self.config.remove_borders, height * 8, width * 8)
             for k, s in zip(keypoints, scores)]))
 
         # Keep the k keypoints with highest score
@@ -201,6 +209,7 @@ class SuperPoint(nn.Module):
 
         # Convert (h, w) to (x, y)
         keypoints = [torch.flip(k, [1]).float() for k in keypoints]
+        scores = [s for s in scores]
 
         # Compute the dense descriptors
         cDa = self.relu(self.convDa(x))

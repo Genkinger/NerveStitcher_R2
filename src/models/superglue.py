@@ -223,7 +223,6 @@ class SuperGlue(nn.Module):
     Paul-Edouard Sarlin, Daniel DeTone, Tomasz Malisiewicz, and Andrew
     Rabinovich. SuperGlue: Learning Feature Matching with Graph Neural
     Networks. In CVPR, 2020. https://arxiv.org/abs/1911.11763
-
     """
 
     def __init__(self, config: SuperGlueConfig):
@@ -255,6 +254,7 @@ class SuperGlue(nn.Module):
         desc0, desc1 = input.descriptors0, input.descriptors1
         kpts0, kpts1 = input.keypoints0, input.keypoints1
 
+        #  NOTE(Leah): Maybe do this one layer higher not here
         if kpts0.shape[1] == 0 or kpts1.shape[1] == 0:  # no keypoints
             shape0, shape1 = kpts0.shape[:-1], kpts1.shape[:-1]
             return SuperGlueOutput(matches0=kpts0.new_full(shape0, -1, dtype=torch.int),
@@ -287,14 +287,20 @@ class SuperGlue(nn.Module):
 
         # Get the matches with score above "match_threshold".
         max0, max1 = scores[:, :-1, :-1].max(2), scores[:, :-1, :-1].max(1)
+
         indices0, indices1 = max0.indices, max1.indices
+
         mutual0 = arange_like(indices0, 1)[None] == indices1.gather(1, indices0)
         mutual1 = arange_like(indices1, 1)[None] == indices0.gather(1, indices1)
+
         zero = scores.new_tensor(0)
+
         mscores0 = torch.where(mutual0, max0.values.exp(), zero)
         mscores1 = torch.where(mutual1, mscores0.gather(1, indices1), zero)
+
         valid0 = mutual0 & (mscores0 > self.config.match_threshold)
         valid1 = mutual1 & valid0.gather(1, indices1)
+
         indices0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
         indices1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
 

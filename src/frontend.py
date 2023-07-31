@@ -1,6 +1,6 @@
 import sys
 import argparse
-from main import do_stitching_naive, Config
+from online_stitching import do_stitching_naive, Config
 from util.metrics import print_metrics
 from dataclasses import fields, MISSING
 

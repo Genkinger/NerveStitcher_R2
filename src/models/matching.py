@@ -71,39 +71,19 @@ class Matching(torch.nn.Module):
         self.superglue = SuperGlue(superglue_config)
 
     def forward(self, data: MatchingInput):
-        """ Run SuperPoint (optionally) and SuperGlue
-        SuperPoint is skipped if ['keypoints0', 'keypoints1'] exist in input
-        Args:
-          data: dictionary with minimal keys: ['image0', 'image1']
-        """
         super_point_result_0: SuperPointOutput = self.superpoint(SuperPointInput(image=data.image0))
         super_point_result_1: SuperPointOutput = self.superpoint(SuperPointInput(image=data.image1))
 
-        # Batch all features
-        # We should either have i) one image per batch, or
-        # ii) the same number of local features for all images in the batch.
-
         superglue_input = SuperGlueInput(image0=data.image0,
                                          image1=data.image1,
-                                         keypoints0=torch.zeros(1),
-                                         keypoints1=torch.zeros(1),
-                                         descriptors0=torch.zeros(1),
-                                         descriptors1=torch.zeros(1),
-                                         scores0=torch.zeros(1),
-                                         scores1=torch.zeros(1))
-
-        superglue_input.descriptors0 = torch.stack(super_point_result_0.descriptors)
-        superglue_input.descriptors1 = torch.stack(super_point_result_1.descriptors)
-        superglue_input.keypoints0 = torch.stack(super_point_result_0.keypoints)
-        superglue_input.keypoints1 = torch.stack(super_point_result_1.keypoints)
-        superglue_input.scores0 = torch.stack(super_point_result_0.scores)
-        superglue_input.scores1 = torch.stack(super_point_result_1.scores)
+                                         keypoints0=torch.stack(super_point_result_0.keypoints),
+                                         keypoints1=torch.stack(super_point_result_1.keypoints),
+                                         descriptors0=torch.stack(super_point_result_0.descriptors),
+                                         descriptors1=torch.stack(super_point_result_1.descriptors),
+                                         scores0=torch.stack(super_point_result_0.scores),
+                                         scores1=torch.stack(super_point_result_1.scores))
 
         superglue_result: SuperGlueOutput = self.superglue(superglue_input)
 
-        return MatchingOutput(keypoints0=superglue_input.keypoints0,
-                              keypoints1=superglue_input.keypoints1,
-                              matches0=superglue_result.matches0,
-                              matches1=superglue_result.matches1,
-                              matching_scores0=superglue_result.matching_scores0,
-                              matching_scores1=superglue_result.matching_scores1)
+        return MatchingOutput(**vars(superglue_result), keypoints0=superglue_input.keypoints0,
+                              keypoints1=superglue_input.keypoints1)
