@@ -1,66 +1,61 @@
-import os.path
-from dataclasses import dataclass, field
-import cv2
 import numpy
 import torch
-
+import cv2
 from os import listdir
-from os.path import join, splitext, basename
+from os.path import join, basename, splitext
 
-from models.superglue import SuperGlueConfig, SuperGlue, SuperGlueInput, SuperGlueOutput
-from models.superpoint import SuperPointConfig, SuperPoint, SuperPointInput, SuperPointOutput
-
-from configuration import configuration
-import pickle
+from typing import Callable
+from models.superpoint import SuperPoint, SuperPointConfig, SuperPointOutput
+from src.preprocessing.averaging import calculate_profile, apply_profile_to_image
+from src.preprocessing.brightness import calculate_brightness_and_contrast, apply_brightness_correction_to_image
 
 torch.set_grad_enabled(False)
 
 
-@dataclass
-class Image:
-    path: str
-    data: numpy.ndarray
-
-
-@dataclass
 class OfflineStitcher(object):
-    superpoint: SuperPoint
-    superglue: SuperGlue
-    images: list[Image] = field(default_factory=lambda: [])
-    superpoint_outputs: list[tuple[str, SuperPointOutput]] = field(default_factory=lambda: [])
+    def __init__(self):
+        self.superpoint = SuperPoint(configuration=SuperPointConfig())
+        self.superglue = None
+        self.input_directory = None
+        self.output_directory = None
+        self.working_title = None
+        self.images = []
+        self.interest_points = []
+        self.matching_scores = []
 
-    def load_images_from_directory(self, directory_path: str):
-        filepaths = [os.path.realpath(join(directory_path, filename)) for filename in listdir(directory_path) if
-                     splitext(filename)[1][1:] in configuration.supported_file_extensions]
-        self.images = [Image(path, cv2.imread(path, cv2.IMREAD_GRAYSCALE)) for path in filepaths]
+    def set_input_directory(self, path: str):
+        self.input_directory = path
+        
+    def set_output_directory(self, path: str):
+        self.output_directory = path
 
-    def extract_keypoints_from_images(self):
+    def set_working_title(self, working_title: str):
+        self.working_title = working_title
+
+    def load_images(self, predicate: Callable[[str], bool] = lambda filename: splitext(filename)[1][1:] in ["tif"]):
+        self.images = [cv2.imread(join(self.input_directory, filename)) for filename in listdir(self.input_directory) if
+                       predicate(filename)]
+
+    def preprocess_images(self, smooth_steps: int = 0):
+        average_profile = calculate_profile(self.images, smooth_steps)
+        self.images = [apply_profile_to_image(image, average_profile) for image in self.images]
+
+    def compute_raw_interest_points_and_descriptors(self):
         for image in self.images:
-            self.superpoint_outputs.append((image.path, self.superpoint(SuperPointInput(image=OfflineStitcher.frame_to_tensor(image.data, configuration.device)))))
+            encoded_representation = self.superpoint.encode(self.frame_to_tensor(image))
+            scores, width, height = self.superpoint.compute_scores(encoded_representation)
 
-    def run(self, input_directory: str, output_directory: str):
-        self.load_images_from_directory(input_directory)
-        self.extract_keypoints_from_images()
-        with open(join(output_directory, "keypoint_data.pickle"), "wb+") as pickle_out_file:
-            pickle.dump(self.superpoint_outputs, pickle_out_file)
-        self.filter_keypoints()
-        self.generate_pairs()
-        self.match()
-        self.save_matches()
-        self.filter_matches()
-
-        # Assume all preprocessing has been done already and the images are usable
-        # Capture all keypoints of every image and save them to disk for further examination
-        # Do Filtering on the Keypoints as neccessary
-        # Create Pairs of Keypoints and Match them via SuperGlue
-        # Here we should implement subregion stitching
-        # Capture all matches/scores and write them to disk for further examination (image data + pure data)
-        # Filter all The Matches and pick the best ones
-        # Filter the matching keypoints
-        # generate affine Transforms for each match
-        # apply affine transform to each image
-        # do the final image stitch
         pass
+
+    def save_raw_interest_points_and_descriptors(self, path: str):
+        pass
+
+    def load_raw_interest_points_and_descriptors(self, path: str):
+        pass
+
+    def filter_interest_points_and_descriptors(self):
+        pass
+
 
     @staticmethod
     def frame_to_tensor(frame: numpy.ndarray, device: str) -> torch.Tensor:
@@ -69,3 +64,7 @@ class OfflineStitcher(object):
         as input to Superpoint, where batch_size = channels = 1
         """
         return torch.from_numpy(frame / 255.).float()[None][None].to(device)
+
+
+
+

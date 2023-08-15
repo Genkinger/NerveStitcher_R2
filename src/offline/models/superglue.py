@@ -267,11 +267,7 @@ class SuperGlue(nn.Module):
                                matching_scores0=mscores0,
                                matching_scores1=mscores1)
 
-    def forward_pre(self):
-        pass
 
-    def forward_post(self):
-        pass
     @staticmethod
     def log_sinkhorn_iterations(Z, log_mu, log_nu, iters: int):
         """ Perform Sinkhorn Normalization in Log-space for stability"""

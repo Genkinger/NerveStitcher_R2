@@ -85,7 +85,7 @@ class Matching(torch.nn.Module):
                                          scores1=torch.stack(super_point_result_1.scores),
                                          index=data.index)
 
-        superglue_result: SuperGlueOutput = self.superglue(superglue_input)
+        superglue_result: SuperGlueOutput = self.superglue(superglue_input, data.index)
 
         return MatchingOutput(**vars(superglue_result), keypoints0=superglue_input.keypoints0,
                               keypoints1=superglue_input.keypoints1)

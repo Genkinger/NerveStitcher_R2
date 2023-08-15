@@ -249,8 +249,9 @@ class SuperGlue(nn.Module):
         self.load_state_dict(torch.load(str(path)))
         print('Loaded SuperGlue model (\"{}\" weights)'.format(
             self.config.weights))
+        self.potential_artefacts = []
 
-    def forward(self, input: SuperGlueInput) -> SuperGlueOutput:
+    def forward(self, input: SuperGlueInput, index = 0) -> SuperGlueOutput:
         """Run SuperGlue on a pair of keypoints and descriptors"""
         desc0, desc1 = input.descriptors0, input.descriptors1
         kpts0, kpts1 = input.keypoints0, input.keypoints1
@@ -307,6 +308,9 @@ class SuperGlue(nn.Module):
         indices0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
         indices1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
 
+        if valid0.to(torch.int32).sum() < 40: # Note(Leah): 40 is completely arbitrary
+            print(f"Potential artefact at index {index}!") # Note(Leah): this alone is quite good
+            self.potential_artefacts.append(index)
         return SuperGlueOutput(matches0=indices0,
                                matches1=indices1,
                                matching_scores0=mscores0,

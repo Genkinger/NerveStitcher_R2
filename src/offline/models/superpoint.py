@@ -42,7 +42,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-
+from os.path import split, join
 import torch
 from torch import nn
 
@@ -63,23 +63,17 @@ class SuperPointOutput:
     descriptors: list[torch.Tensor]
 
 
-@dataclass
-class SuperPointInput:
-    image: torch.Tensor
-
-
 class SuperPoint(nn.Module):
     """SuperPoint Convolutional Detector and Descriptor
 
     SuperPoint: Self-Supervised Interest Point Detection and
     Description. Daniel DeTone, Tomasz Malisiewicz, and Andrew
     Rabinovich. In CVPRW, 2019. https://arxiv.org/abs/1712.07629
-
     """
 
-    def __init__(self, config: SuperPointConfig):
+    def __init__(self, configuration: SuperPointConfig):
         super().__init__()
-        self.config = config
+        self.configuration = configuration
 
         self.relu = nn.ReLU(inplace=True)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
@@ -99,79 +93,89 @@ class SuperPoint(nn.Module):
 
         self.convDa = nn.Conv2d(c4, c5, kernel_size=3, stride=1, padding=1)
         self.convDb = nn.Conv2d(
-            c5, self.config.descriptor_dim,
+            c5, self.configuration.descriptor_dim,
             kernel_size=1, stride=1, padding=0)
         # TODO(Leah): Make this less weird, separate pure data from code
-        path = Path(__file__).parent / 'weights/superpoint_v1.pth'
-        self.load_state_dict(torch.load(str(path)))
-
-        mk = self.config.max_keypoints
-        if mk == 0 or mk < -1:
-            raise ValueError('\"max_keypoints\" must be positive or \"-1\"')
+        # path = Path(__file__).parent / 'weights/superpoint_v1.pth'
+        self.load_state_dict(torch.load(join(split(__file__)[0], "weights", "superpoint_v1.pth")))
 
         print('Loaded SuperPoint model')
 
-    def forward(self, input: SuperPointInput) -> SuperPointOutput:
-        """ Compute keypoints, scores, descriptors for image """
-        # Shared Encoder
-        x = self.relu(self.conv1a(input.image))
-        x = self.relu(self.conv1b(x))
-        x = self.pool(x)
-        x = self.relu(self.conv2a(x))
-        x = self.relu(self.conv2b(x))
-        x = self.pool(x)
-        x = self.relu(self.conv3a(x))
-        x = self.relu(self.conv3b(x))
-        x = self.pool(x)
-        x = self.relu(self.conv4a(x))
-        x = self.relu(self.conv4b(x))
+    def encode(self, image: torch.Tensor):
+        encoded_representation = self.relu(self.conv1a(image))
+        encoded_representation = self.relu(self.conv1b(encoded_representation))
+        encoded_representation = self.pool(encoded_representation)
+        encoded_representation = self.relu(self.conv2a(encoded_representation))
+        encoded_representation = self.relu(self.conv2b(encoded_representation))
+        encoded_representation = self.pool(encoded_representation)
+        encoded_representation = self.relu(self.conv3a(encoded_representation))
+        encoded_representation = self.relu(self.conv3b(encoded_representation))
+        encoded_representation = self.pool(encoded_representation)
+        encoded_representation = self.relu(self.conv4a(encoded_representation))
+        encoded_representation = self.relu(self.conv4b(encoded_representation))
+        return encoded_representation
 
-        # Compute the dense keypoint scores
-        cPa = self.relu(self.convPa(x))
+    def compute_scores(self, encoded_representation):
+        cPa = self.relu(self.convPa(encoded_representation))
         scores = self.convPb(cPa)
         scores = torch.nn.functional.softmax(scores, 1)[:, :-1]
         batch_size, _, height, width = scores.shape
         scores = scores.permute(0, 2, 3, 1).reshape(batch_size, height, width, 8, 8)
         scores = scores.permute(0, 1, 3, 2, 4).reshape(batch_size, height * 8, width * 8)
+        scores = SuperPoint.simple_nms(scores, self.configuration.nms_radius)
+        return scores, width, height
 
-        # Non maximum value suppression
-        scores = SuperPoint.simple_nms(scores, self.config.nms_radius)
-
-        # Extract keypoints, one tensor for each batch, in our case ALWAYS 1
-        # TODO(Leah): Maybe make this simpler, we don't use batching anyways
+    def extract_keypoints(self, scores: torch.Tensor, threshold: float):
         keypoints = []
         for s in scores:
-            keypoints.append(torch.nonzero(s > self.config.keypoint_threshold))
+            keypoints.append(torch.nonzero(s > threshold))
+        return keypoints
 
-        # extract score of each keypoint
-        scrs = []
+    def extract_keypoint_scores(self, scores: torch.Tensor, keypoints: list[torch.Tensor]):
+        scores_out = []
         for s, k in zip(scores, keypoints):
             index = tuple(k.t())
-            scrs.append(s[index])
-        scores = scrs
+            scores_out.append(s[index])
+        return scores_out
 
-        # Discard keypoints near the image borders
-        #keypoints, scores = list(zip(*[
-        #    SuperPoint.remove_borders(k, s, self.config.remove_borders, height * 8, width * 8)
-        #    for k, s in zip(keypoints, scores)]))
+    def remove_keypoints_at_image_border(self, keypoints: list[torch.Tensor], scores: list[torch.Tensor], width: int,
+                                         height: int):
+        keypoints_out, scores_out = list(zip(*[
+            SuperPoint.remove_borders(k, s, self.configuration.remove_borders, height * 8, width * 8)
+            for k, s in zip(keypoints, scores)]))
+        return keypoints_out, scores_out
 
-        # Keep the k keypoints with highest score
-        #if self.config.max_keypoints >= 0:
-        #    keypoints, scores = list(zip(*[
-        #        SuperPoint.top_k_keypoints(k, s, self.config.max_keypoints)
-        #        for k, s in zip(keypoints, scores)]))
+    def filter_top_k_keypoints(self, keypoints: list[torch.Tensor], scores: list[torch.Tensor], count: int):
+        keypoints_out, scores_out = list(zip(*[
+            SuperPoint.top_k_keypoints(k, s, count)
+            for k, s in zip(keypoints, scores)]))
+        return keypoints_out, scores_out
 
-        # Convert (h, w) to (x, y)
-        keypoints = [torch.flip(k, [1]).float() for k in keypoints]
+    def flip_keypoints(self, keypoints: list[torch.Tensor]):
+        return [torch.flip(k, [1]).float() for k in keypoints]
 
-        # Compute the dense descriptors
-        cDa = self.relu(self.convDa(x))
+    def extract_descriptors(self, encoded_representation: torch.Tensor, keypoints_flipped: list[torch.Tensor]):
+        cDa = self.relu(self.convDa(encoded_representation))
         descriptors = self.convDb(cDa)
         descriptors = torch.nn.functional.normalize(descriptors, p=2, dim=1)
 
         # Extract descriptors
         descriptors = [SuperPoint.sample_descriptors(k[None], d[None], 8)[0]
-                       for k, d in zip(keypoints, descriptors)]
+                       for k, d in zip(keypoints_flipped, descriptors)]
+        return descriptors
+
+    def forward(self, image: torch.Tensor) -> SuperPointOutput:
+        """ Compute keypoints, scores, descriptors for image """
+        # Shared Encoder
+        encoded_representation = self.encode(image)
+        scores, width, height = self.compute_scores(encoded_representation)
+        keypoints = self.extract_keypoints(scores, self.configuration.keypoint_threshold)
+        scores = self.extract_keypoint_scores(scores, keypoints)
+        keypoints, scores = self.remove_keypoints_at_image_border(keypoints, scores, width, height)
+        if self.configuration.max_keypoints >= 0:
+            keypoints, scores = self.filter_top_k_keypoints(keypoints, scores, self.configuration.max_keypoints)
+        keypoints = self.flip_keypoints(keypoints)
+        descriptors = self.extract_descriptors(encoded_representation, keypoints)
 
         return SuperPointOutput(keypoints=keypoints, scores=scores, descriptors=descriptors)
 

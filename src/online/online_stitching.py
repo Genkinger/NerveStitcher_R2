@@ -132,25 +132,35 @@ def do_stitching_naive(config: Config):
 
             mkpts0, mkpts1 = generate_keypoints(matcher, image_a, image_b, config.device, i)
 
-            if not mkpts0.shape[0] > 0 or not mkpts1.shape[0] > 0:
-                print(
-                    f"[INFO]: No Keypoints extracted in iteration {i} when matching {basename(image_path_pairs[i][0])} with {basename(image_path_pairs[i][1])}!")
-                print(f"[INFO]: Continuing!")
-                previous_image = image_b
-                next_image_offset = Point()
-                current_size = Point(previous_image.shape[1], previous_image.shape[0])
-                continue
+            # if not mkpts0.shape[0] > 0 or not mkpts1.shape[0] > 0:
+            #     print(
+            #         f"[INFO]: No Keypoints extracted in iteration {i} when matching {basename(image_path_pairs[i][0])} with {basename(image_path_pairs[i][1])}!")
+            #     print(f"[INFO]: Continuing!")
+            #     previous_image = image_b
+            #     next_image_offset = Point()
+            #     current_size = Point(previous_image.shape[1], previous_image.shape[0])
+            #     continue
+            #
+            # matrix, _ = cv2.estimateAffinePartial2D(mkpts0, mkpts1)
+            # if matrix is None:
+            #     print(
+            #         f"[INFO]: Unable to estimate transform between {basename(image_path_pairs[i][0])} and {basename(image_path_pairs[i][1])} on iteration {i} ! ")
+            #     print(f"[INFO]: Continuing!")
+            #     previous_image = image_b
+            #     next_image_offset = Point()
+            #     current_size = Point(previous_image.shape[1], previous_image.shape[0])
+            #     continue
+            #
+            # previous_image = combine_images_naive(previous_image, image_b, matrix, next_image_offset, current_size)
+            # cv2.imwrite(join(config.output_directory, f"intermediate_{i}.jpg"), previous_image)
 
-            matrix, _ = cv2.estimateAffinePartial2D(mkpts0, mkpts1)
-            if matrix is None:
-                print(
-                    f"[INFO]: Unable to estimate transform between {basename(image_path_pairs[i][0])} and {basename(image_path_pairs[i][1])} on iteration {i} ! ")
-                print(f"[INFO]: Continuing!")
-                previous_image = image_b
-                next_image_offset = Point()
-                current_size = Point(previous_image.shape[1], previous_image.shape[0])
-                continue
+    artefact_directory = f"{config.output_directory}/artefacts"
+    if not os.path.exists(artefact_directory):
+        os.makedirs(artefact_directory)
 
-            previous_image = combine_images_naive(previous_image, image_b, matrix, next_image_offset, current_size)
-            cv2.imwrite(join(config.output_directory, f"intermediate_{i}.jpg"), previous_image)
+    for index in matcher.superglue.potential_artefacts:
+        if not os.path.exists(f"{artefact_directory}/{index}"):
+            os.makedirs(f"{artefact_directory}/{index}")
+        cv2.imwrite(f"{artefact_directory}/{index}/image_a.png", image_pairs[index][0])
+        cv2.imwrite(f"{artefact_directory}/{index}/image_b.png", image_pairs[index][1])
 
