@@ -1,5 +1,5 @@
 import numpy
-from src.util.metrics import capture_timing_info
+from util.metrics import capture_timing_info
 
 
 @capture_timing_info()

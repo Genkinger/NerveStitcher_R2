@@ -1,0 +1,19 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File With Args and Env",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            //"args": ["C:\\Bachelor\\Datasets\\EGT7_001-A_3_snp","C:\\Bachelor\\Datasets\\EGT7_001-A_3_snp\\results"],
+            "args": ["stitch","--input_directory","C:\\Bachelor\\Datasets\\EGT7_001-A_3_snp","--output_directory","C:\\Bachelor\\Datasets\\EGT7_001-A_3_snp\\results"],
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}

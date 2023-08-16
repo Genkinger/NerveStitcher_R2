@@ -1,11 +1,11 @@
 import sys
 import argparse
-from src.online.online_stitching import do_stitching_naive, Config
+from online.online_stitching import do_stitching_naive, Config
 from util.metrics import print_metrics
 from dataclasses import fields, MISSING
 
 
-class Frontend(object):
+class SimpleCLIFrontend(object):
     def __init__(self):
         main_parser = argparse.ArgumentParser(prog="NerveStitcher_R2", description="Frontend for NerveStitcher_R2")
         main_parser.add_argument("command")
@@ -27,12 +27,11 @@ class Frontend(object):
         return parser
 
     def stitch(self):
-        parser = self.create_arg_parser_from_dataclass(
+        parser = SimpleCLIFrontend.create_arg_parser_from_dataclass(
             Config, description="Runs the final stitching on the given input directory")
         arguments = parser.parse_args(sys.argv[2:])
 
         do_stitching_naive(Config(**vars(arguments)))
         print_metrics(True)
 
-
-Frontend()
+SimpleCLIFrontend()

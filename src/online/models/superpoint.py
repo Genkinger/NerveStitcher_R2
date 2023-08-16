@@ -45,6 +45,7 @@ import torch
 from torch import nn
 from dataclasses import dataclass
 from matplotlib import pyplot as plt
+from configuration import configuration
 
 
 def simple_nms(scores, nms_radius: int):
@@ -207,15 +208,25 @@ class SuperPoint(nn.Module):
 
         # Convert (h, w) to (x, y)
         keypoints = [torch.flip(k, [1]).float() for k in keypoints]
-        scores = [s for s in scores]
+        #scores = [s for s in scores]
 
         # Compute the dense descriptors
         cDa = self.relu(self.convDa(x))
         descriptors = self.convDb(cDa)
         descriptors = torch.nn.functional.normalize(descriptors, p=2, dim=1)
-
+        
+        sampling_grid = torch.nn.functional.affine_grid(torch.Tensor([[[1,0,0],[0,1,0]]]),[1,1,384,384]).to(configuration.device)
+        descriptors_upsampled = torch.nn.functional.grid_sample(descriptors, sampling_grid, mode="bilinear", align_corners=True)
+        descriptors_upsampled = torch.nn.functional.normalize(descriptors_upsampled)
+        
+        tmp_descriptors = []
+        for k, d in zip(keypoints,descriptors_upsampled):
+            k = k.to(torch.long)
+            tmp_descriptors.append(d[:,k[:,1],k[:,0]])
+        
+        descriptors = tmp_descriptors
         # Extract descriptors
-        descriptors = [sample_descriptors(k[None], d[None], 8)[0]
-                       for k, d in zip(keypoints, descriptors)]
+        #descriptors = [sample_descriptors(k[None], d[None], 8)[0]
+        #               for k, d in zip(keypoints, descriptors)]
 
         return SuperPointOutput(keypoints=keypoints, scores=scores, descriptors=descriptors)

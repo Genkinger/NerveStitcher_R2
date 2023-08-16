@@ -5,16 +5,17 @@ from os import listdir
 from os.path import join, basename, splitext
 
 from typing import Callable
-from models.superpoint import SuperPoint, SuperPointConfig, SuperPointOutput
-from src.preprocessing.averaging import calculate_profile, apply_profile_to_image
-from src.preprocessing.brightness import calculate_brightness_and_contrast, apply_brightness_correction_to_image
+from models.superpoint import SuperPointMinimal
+from preprocessing.averaging import calculate_profile, apply_profile_to_image
+from configuration import configuration
+from matplotlib import pyplot as plt
 
 torch.set_grad_enabled(False)
 
 
 class OfflineStitcher(object):
     def __init__(self):
-        self.superpoint = SuperPoint(configuration=SuperPointConfig())
+        self.superpoint = SuperPointMinimal()
         self.superglue = None
         self.input_directory = None
         self.output_directory = None
@@ -33,7 +34,7 @@ class OfflineStitcher(object):
         self.working_title = working_title
 
     def load_images(self, predicate: Callable[[str], bool] = lambda filename: splitext(filename)[1][1:] in ["tif"]):
-        self.images = [cv2.imread(join(self.input_directory, filename)) for filename in listdir(self.input_directory) if
+        self.images = [cv2.imread(join(self.input_directory, filename),cv2.IMREAD_GRAYSCALE) for filename in listdir(self.input_directory) if
                        predicate(filename)]
 
     def preprocess_images(self, smooth_steps: int = 0):
@@ -42,10 +43,18 @@ class OfflineStitcher(object):
 
     def compute_raw_interest_points_and_descriptors(self):
         for image in self.images:
-            encoded_representation = self.superpoint.encode(self.frame_to_tensor(image))
-            scores, width, height = self.superpoint.compute_scores(encoded_representation)
-
-        pass
+            self.superpoint.encode(self.frame_to_tensor(image, configuration.device))
+            self.superpoint.compute_scores()
+            self.superpoint.extract_keypoints()
+            #self.superpoint.extract_keypoint_scores()
+            #self.superpoint.remove_keypoints_at_image_border()
+            #if self.superpoint.max_keypoints >= 0:
+            #    self.superpoint.filter_top_k_keypoints()
+            self.superpoint.flip_keypoints()
+            self.superpoint.compute_descriptors()
+            self.superpoint.extract_descriptors()
+            self.interest_points.append(self.superpoint.keypoints.copy())
+            self.superpoint.reset_state()
 
     def save_raw_interest_points_and_descriptors(self, path: str):
         pass
