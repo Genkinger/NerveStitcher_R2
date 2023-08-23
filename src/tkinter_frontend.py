@@ -4,7 +4,7 @@ from tkinter.filedialog import askdirectory
 
 import cv2
 from os.path import join, basename
-from util.common import get_file_paths_with_extensions
+from util.helpers import get_file_paths_with_extensions
 from preprocessing.averaging import apply_profile_to_image, calculate_profile
 from configuration import configuration
 

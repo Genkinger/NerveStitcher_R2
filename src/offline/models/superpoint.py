@@ -49,15 +49,6 @@ from matplotlib import pyplot as plt
 
 
 @dataclass
-class SuperPointConfig:
-    descriptor_dim: int = 256
-    nms_radius: int = 4
-    max_keypoints: int = -1
-    keypoint_threshold: float = 0.005
-    remove_borders: int = 4
-
-
-@dataclass
 class SuperPointOutput:
     keypoints: list[torch.Tensor]
     scores: list[torch.Tensor]
@@ -65,7 +56,6 @@ class SuperPointOutput:
 
 
 class SuperPointMinimal(nn.Module):
-
     def __init__(
         self,
         descriptor_dimensions=configuration.descriptor_dimensions,
@@ -82,17 +72,6 @@ class SuperPointMinimal(nn.Module):
         self.max_keypoints = max_keypoints
         self.keypoint_threshold = keypoint_threshold
         self.remove_borders = remove_borders
-
-        # STATE
-        self.scores = None
-        self.keypoints = None
-        self.descriptors = None
-        self.encoded_representation = None
-        self.batch_size = None
-        self.width = None
-        self.height = None
-        self.descriptors_upsampled = None
-    
 
         # MODEL DEFINITION
         self.relu = nn.ReLU(inplace=True)
@@ -124,141 +103,114 @@ class SuperPointMinimal(nn.Module):
         self.to(configuration.device)
         print("Loaded SuperPoint model")
 
-    def reset_state(self):
-        self.scores = None
-        self.keypoints = None
-        self.descriptors = None
-        self.encoded_representation = None
-        self.width = None
-        self.height = None
-        self.descriptors_upsampled = None
+    def encode(self, image: torch.Tensor) -> torch.Tensor:
+        encoded_representation = self.relu(self.conv1a(image))
+        encoded_representation = self.relu(self.conv1b(encoded_representation))
+        encoded_representation = self.pool(encoded_representation)
+        encoded_representation = self.relu(self.conv2a(encoded_representation))
+        encoded_representation = self.relu(self.conv2b(encoded_representation))
+        encoded_representation = self.pool(encoded_representation)
+        encoded_representation = self.relu(self.conv3a(encoded_representation))
+        encoded_representation = self.relu(self.conv3b(encoded_representation))
+        encoded_representation = self.pool(encoded_representation)
+        encoded_representation = self.relu(self.conv4a(encoded_representation))
+        encoded_representation = self.relu(self.conv4b(encoded_representation))
+        return encoded_representation
 
-    def encode(self, image: torch.Tensor):
-        self.encoded_representation = self.relu(self.conv1a(image))
-        self.encoded_representation = self.relu(
-            self.conv1b(self.encoded_representation)
+    def compute_scores(self, encoded_representation: torch.Tensor) -> torch.Tensor:
+        cPa = self.relu(self.convPa(encoded_representation))
+        scores = self.convPb(cPa)
+        scores = torch.nn.functional.softmax(scores, 1)[:, :-1]
+        batch_size, _, height, width = scores.shape
+        scores = scores.permute(0, 2, 3, 1).reshape(batch_size, height, width, 8, 8)
+        scores = scores.permute(0, 1, 3, 2, 4).reshape(
+            batch_size, height * 8, width * 8
         )
-        self.encoded_representation = self.pool(self.encoded_representation)
-        self.encoded_representation = self.relu(
-            self.conv2a(self.encoded_representation)
-        )
-        self.encoded_representation = self.relu(
-            self.conv2b(self.encoded_representation)
-        )
-        self.encoded_representation = self.pool(self.encoded_representation)
-        self.encoded_representation = self.relu(
-            self.conv3a(self.encoded_representation)
-        )
-        self.encoded_representation = self.relu(
-            self.conv3b(self.encoded_representation)
-        )
-        self.encoded_representation = self.pool(self.encoded_representation)
-        self.encoded_representation = self.relu(
-            self.conv4a(self.encoded_representation)
-        )
-        self.encoded_representation = self.relu(
-            self.conv4b(self.encoded_representation)
-        )
+        #scores = SuperPointMinimal.non_maximum_suppression(scores, self.nms_radius)
+        return scores
 
-    def compute_scores(self):
-        cPa = self.relu(self.convPa(self.encoded_representation))
-        self.scores = self.convPb(cPa)
-        self.scores = torch.nn.functional.softmax(self.scores, 1)[:, :-1]
-        self.batch_size, _, self.height, self.width = self.scores.shape
-        self.scores = self.scores.permute(0, 2, 3, 1).reshape(
-            self.batch_size, self.height, self.width, 8, 8
-        )
-        self.scores = self.scores.permute(0, 1, 3, 2, 4).reshape(
-            self.batch_size, self.height * 8, self.width * 8
-        )
-        self.scores = SuperPointMinimal.simple_nms(self.scores, self.nms_radius)
-
-    def extract_keypoints(self):
-        self.keypoints = []
-        for s in self.scores:
-            self.keypoints.append(torch.nonzero(s > self.keypoint_threshold))
-
-    def extract_keypoint_scores(self):
-        scores_out = []
-        for s, k in zip(self.scores, self.keypoints):
-            index = tuple(k.t())
-            scores_out.append(s[index])
-        self.scores = scores_out
-
-    def remove_keypoints_at_image_border(self):
-        keypoints_out, scores_out = list(
-            zip(
-                *[
-                    SuperPointMinimal.remove_borders(
-                        k, s, self.remove_borders, self.height * 8, self.width * 8
-                    )
-                    for k, s in zip(self.keypoints, self.scores)
-                ]
-            )
-        )
-        self.keypoints = keypoints_out
-        self.scores = scores_out
-
-    def filter_top_k_keypoints(self):
-        keypoints_out, scores_out = list(
-            zip(
-                *[
-                    SuperPointMinimal.top_k_keypoints(k, s, self.max_keypoints)
-                    for k, s in zip(self.keypoints, self.scores)
-                ]
-            )
-        )
-        self.keypoints = keypoints_out
-        self.scores = scores_out
-
-    def flip_keypoints(self):
-        self.keypoints = [torch.flip(k, [1]).float() for k in self.keypoints]
-
-    def compute_descriptors(self):
-        cDa = self.relu(self.convDa(self.encoded_representation))
-        self.descriptors = self.convDb(cDa)
-        self.descriptors = torch.nn.functional.normalize(self.descriptors, p=2, dim=1)
-
+    def compute_descriptors(
+        self, encoded_representation, batch_size,channels, height, width
+    ):
+        cDa = self.relu(self.convDa(encoded_representation))
+        descriptors = self.convDb(cDa)
+        descriptors = torch.nn.functional.normalize(descriptors, p=2, dim=1)
         sampling_grid = torch.nn.functional.affine_grid(
-            torch.Tensor([[[1, 0, 0], [0, 1, 0]]]), [1, 1, self.width, self.height]
+            torch.Tensor([[[1, 0, 0], [0, 1, 0]]]),
+            [batch_size, channels, height, width],
         ).to(configuration.device)
-        self.descriptors_upsampled = torch.nn.functional.grid_sample(
-            self.descriptors, sampling_grid, mode="bilinear", align_corners=True
+        descriptors_upsampled = torch.nn.functional.grid_sample(
+            descriptors, sampling_grid, mode="bilinear", align_corners=True
         )
-        self.descriptors_upsampled = torch.nn.functional.normalize(
-            self.descriptors_upsampled
+        descriptors_upsampled = torch.nn.functional.normalize(descriptors_upsampled)
+        return descriptors_upsampled
+
+    def forward(self, image: torch.Tensor):
+        batch_size, channels, height, width = image.shape
+        encoded_representation = self.encode(image)
+        scores = self.compute_scores(
+            encoded_representation
         )
+        descriptors = self.compute_descriptors(
+            encoded_representation, batch_size=batch_size, channels=channels,height=height,width=width)
 
-    def extract_descriptors(self):
-        cDa = self.relu(self.convDa(self.encoded_representation))
-        self.descriptors = self.convDb(cDa)
-        self.descriptors = torch.nn.functional.normalize(self.descriptors, p=2, dim=1)
+        return scores, descriptors
+    # def extract_keypoints(self):
+    #     self.keypoints = []
+    #     for s in self.scores:
+    #         self.keypoints.append(torch.nonzero(s > self.keypoint_threshold))
 
-        # Extract descriptors
-        self.descriptors = [
-            SuperPointMinimal.sample_descriptors(k[None], d[None], 8)[0]
-            for k, d in zip(self.keypoints, self.descriptors)
-        ]
+    # def extract_keypoint_scores(self):
+    #     scores_out = []
+    #     for s, k in zip(self.scores, self.keypoints):
+    #         index = tuple(k.t())
+    #         scores_out.append(s[index])
+    #     self.scores = scores_out
 
-    def forward(self, image: torch.Tensor) -> SuperPointOutput:
-        """Compute keypoints, scores, descriptors for image"""
-        # Shared Encoder
-        self.encode(image)
-        self.compute_scores()
-        self.extract_keypoints()
-        self.extract_keypoint_scores()
-        self.remove_keypoints_at_image_border()
-        if self.max_keypoints >= 0:
-            self.filter_top_k_keypoints()
-        self.flip_keypoints()
-        self.extract_descriptors()
+    # def remove_keypoints_at_image_border(self):
+    #     keypoints_out, scores_out = list(
+    #         zip(
+    #             *[
+    #                 SuperPointMinimal.remove_borders(
+    #                     k, s, self.remove_borders, self.height * 8, self.width * 8
+    #                 )
+    #                 for k, s in zip(self.keypoints, self.scores)
+    #             ]
+    #         )
+    #     )
+    #     self.keypoints = keypoints_out
+    #     self.scores = scores_out
 
-        return SuperPointOutput(
-            keypoints=self.keypoints, scores=self.scores, descriptors=self.descriptors
-        )
+    # def filter_top_k_keypoints(self):
+    #     keypoints_out, scores_out = list(
+    #         zip(
+    #             *[
+    #                 SuperPointMinimal.top_k_keypoints(k, s, self.max_keypoints)
+    #                 for k, s in zip(self.keypoints, self.scores)
+    #             ]
+    #         )
+    #     )
+    #     self.keypoints = keypoints_out
+    #     self.scores = scores_out
+
+    # def flip_keypoints(self):
+    #     self.keypoints = [torch.flip(k, [1]).float() for k in self.keypoints]
+
+    # def extract_descriptors(self):
+    #     cDa = self.relu(self.convDa(self.encoded_representation))
+    #     self.descriptors = self.convDb(cDa)
+    #     self.descriptors = torch.nn.functional.normalize(self.descriptors, p=2, dim=1)
+
+    #     # Extract descriptors
+    #     self.descriptors = [
+    #         SuperPointMinimal.sample_descriptors(k[None], d[None], 8)[0]
+    #         for k, d in zip(self.keypoints, self.descriptors)
+    #     ]
+
+   
 
     @staticmethod
-    def simple_nms(scores, nms_radius: int):
+    def non_maximum_suppression(scores, nms_radius: int):
         """Fast Non-maximum suppression to remove nearby points"""
         assert nms_radius >= 0
 

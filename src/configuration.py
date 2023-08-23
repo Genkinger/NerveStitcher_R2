@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 import torch
 
-
 @dataclass
 class Configuration:
     nms_radius: int = 4
@@ -13,8 +12,7 @@ class Configuration:
     descriptor_dimensions: int = 256
     force_cpu: bool = False
     device = "cuda" if torch.cuda.is_available() and not force_cpu else "cpu"
-    supported_file_extensions: list[str] = field(default_factory=lambda: ["jpg", "tif"])
+    supported_file_extensions: list[str] = field(default_factory=lambda: ["jpg", "tif", "png"])
 
 
 configuration = Configuration()
-
