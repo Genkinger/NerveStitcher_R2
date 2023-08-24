@@ -11,7 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["C:\\Bachelor\\Datasets\\EGT7_A_3","C:\\Bachelor\\Datasets\\EGT7_A_3\\results"],
+            "args": ["C:\\Bachelor\\Datasets\\Sample","C:\\Bachelor\\Datasets\\Sample\\results"],
             //"args": ["stitch","--input_directory","C:\\Bachelor\\Datasets\\EGT7_001-A_3_snp","--output_directory","C:\\Bachelor\\Datasets\\EGT7_001-A_3_snp\\results"],
             "envFile": "${workspaceFolder}/.env"
         }

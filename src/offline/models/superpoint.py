@@ -44,34 +44,27 @@ from dataclasses import dataclass
 from os.path import split, join
 import torch
 from torch import nn
-from configuration import configuration
+from configuration import global_configuration
 from matplotlib import pyplot as plt
-
-
-@dataclass
-class SuperPointOutput:
-    keypoints: list[torch.Tensor]
-    scores: list[torch.Tensor]
-    descriptors: list[torch.Tensor]
-
+from util.metrics import capture_timing_info
 
 class SuperPointMinimal(nn.Module):
     def __init__(
         self,
-        descriptor_dimensions=configuration.descriptor_dimensions,
-        nms_radius=configuration.nms_radius,
-        max_keypoints=configuration.max_keypoints,
-        keypoint_threshold=configuration.keypoint_threshold,
-        remove_borders=4,
+        descriptor_dimensions=global_configuration.descriptor_dimensions,
+        nms_radius=global_configuration.nms_radius,
+        max_keypoints=global_configuration.max_keypoints,
+        keypoint_threshold=global_configuration.keypoint_threshold,
+        border_exclude_pixel_count=global_configuration.border_exclude_pixel_count,
     ):
         super().__init__()
 
-        # CONFIG
+        # CONFIGURATION
         self.descriptor_dimensions = descriptor_dimensions
         self.nms_radius = nms_radius
         self.max_keypoints = max_keypoints
         self.keypoint_threshold = keypoint_threshold
-        self.remove_borders = remove_borders
+        self.border_exclude_pixel_count = border_exclude_pixel_count
 
         # MODEL DEFINITION
         self.relu = nn.ReLU(inplace=True)
@@ -100,7 +93,7 @@ class SuperPointMinimal(nn.Module):
             torch.load(join(split(__file__)[0], "weights", "superpoint_v1.pth"))
         )
 
-        self.to(configuration.device)
+        self.to(global_configuration.device)
         print("Loaded SuperPoint model")
 
     def encode(self, image: torch.Tensor) -> torch.Tensor:
@@ -126,11 +119,12 @@ class SuperPointMinimal(nn.Module):
         scores = scores.permute(0, 1, 3, 2, 4).reshape(
             batch_size, height * 8, width * 8
         )
-        #scores = SuperPointMinimal.non_maximum_suppression(scores, self.nms_radius)
+        scores = SuperPointMinimal.non_maximum_suppression(scores, self.nms_radius)
         return scores
-
-    def compute_descriptors(
-        self, encoded_representation, batch_size,channels, height, width
+    
+    @capture_timing_info()
+    def compute_descriptors_full(
+        self, encoded_representation, batch_size, channels, height, width
     ):
         cDa = self.relu(self.convDa(encoded_representation))
         descriptors = self.convDb(cDa)
@@ -138,7 +132,7 @@ class SuperPointMinimal(nn.Module):
         sampling_grid = torch.nn.functional.affine_grid(
             torch.Tensor([[[1, 0, 0], [0, 1, 0]]]),
             [batch_size, channels, height, width],
-        ).to(configuration.device)
+        ).to(global_configuration.device)
         descriptors_upsampled = torch.nn.functional.grid_sample(
             descriptors, sampling_grid, mode="bilinear", align_corners=True
         )
@@ -148,13 +142,12 @@ class SuperPointMinimal(nn.Module):
     def forward(self, image: torch.Tensor):
         batch_size, channels, height, width = image.shape
         encoded_representation = self.encode(image)
-        scores = self.compute_scores(
-            encoded_representation
-        )
-        descriptors = self.compute_descriptors(
+        scores = self.compute_scores(encoded_representation)
+        descriptors = self.compute_descriptors_full(
             encoded_representation, batch_size=batch_size, channels=channels,height=height,width=width)
 
         return scores, descriptors
+    
     # def extract_keypoints(self):
     #     self.keypoints = []
     #     for s in self.scores:

@@ -45,7 +45,7 @@ import torch
 from torch import nn
 from dataclasses import dataclass
 from matplotlib import pyplot as plt
-from configuration import configuration
+from configuration import global_configuration
 
 
 def simple_nms(scores, nms_radius: int):
@@ -215,7 +215,7 @@ class SuperPoint(nn.Module):
         descriptors = self.convDb(cDa)
         descriptors = torch.nn.functional.normalize(descriptors, p=2, dim=1)
         
-        sampling_grid = torch.nn.functional.affine_grid(torch.Tensor([[[1,0,0],[0,1,0]]]),[1,1,384,384]).to(configuration.device)
+        sampling_grid = torch.nn.functional.affine_grid(torch.Tensor([[[1,0,0],[0,1,0]]]),[1,1,384,384]).to(global_configuration.device)
         descriptors_upsampled = torch.nn.functional.grid_sample(descriptors, sampling_grid, mode="bilinear", align_corners=True)
         descriptors_upsampled = torch.nn.functional.normalize(descriptors_upsampled)
         

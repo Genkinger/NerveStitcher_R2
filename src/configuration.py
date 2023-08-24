@@ -13,6 +13,7 @@ class Configuration:
     force_cpu: bool = False
     device = "cuda" if torch.cuda.is_available() and not force_cpu else "cpu"
     supported_file_extensions: list[str] = field(default_factory=lambda: ["jpg", "tif", "png"])
+    border_exclude_pixel_count: int = 4
 
 
-configuration = Configuration()
+global_configuration = Configuration()

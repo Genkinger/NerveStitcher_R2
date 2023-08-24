@@ -1,16 +1,16 @@
 from offline_stitching import OfflineStitcher
 import sys
 from matplotlib import pyplot as plt
+import torch
+from util.metrics import print_metrics
 
-
-def visualize(stitcher, index):
-    image, scores, descriptors = stitcher.interst_point_data[index]
-
-    fig, (a,b,c) = plt.subplots(1,3)
-    a.imshow(image,cmap="greys")
-    b.imshow(scores.squeeze(),cmap="greys")
-    c.imshow(descriptors.squeeze()[0,:,:])
-    fig.show()
+# def visualize(stitcher, index):
+#     image, scores, descriptors = stitcher.interest_point_data[index]
+#     plt.imshow(image,cmap="Greys_r")
+#     keypoints = torch.nonzero(torch.from_numpy(scores.squeeze()) > 0.005)
+#     keypoints = keypoints.transpose(0,1)
+#     plt.scatter(keypoints[1].numpy(),keypoints[0].numpy(),s=1,c="Red")
+#     plt.show()
 
 
 stitcher = OfflineStitcher()
@@ -21,11 +21,11 @@ stitcher.set_input_directory(sys.argv[1])
 stitcher.set_output_directory(sys.argv[2])
 stitcher.set_working_title("A3")
 stitcher.load_images()
-#stitcher.preprocess_images()
-stitcher.compute_raw_interest_points_and_descriptors()
-stitcher.save_raw_interest_points_and_descriptors("./points.pickle")
+stitcher.preprocess_images()
+stitcher.compute_raw_interest_points_and_descriptors(f"{sys.argv[2]}/raw_ip.pkl")
+#stitcher.save_raw_interest_points_and_descriptors("./points.pickle")
 
-visualize(stitcher,99)
+print_metrics(True)
 
 #stitcher.load_raw_interest_points_and_descriptors("./points.pickle")
 #stitcher.save_raw_interest_points_and_descriptors("./Results/superpoint_checkpoint.pickle")

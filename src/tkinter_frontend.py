@@ -6,7 +6,7 @@ import cv2
 from os.path import join, basename
 from util.helpers import get_file_paths_with_extensions
 from preprocessing.averaging import apply_profile_to_image, calculate_profile
-from configuration import configuration
+from configuration import global_configuration
 
 import threading
 
@@ -54,7 +54,7 @@ class Frontend(tkinter.Tk):
     def preprocess(self):
         
         def worker():
-            image_paths = get_file_paths_with_extensions(self.preprocessing_input_directory.get(),configuration.supported_file_extensions)
+            image_paths = get_file_paths_with_extensions(self.preprocessing_input_directory.get(),global_configuration.supported_file_extensions)
             images = [cv2.imread(image_path) for image_path in image_paths]
             profile = calculate_profile(images)
             images = [apply_profile_to_image(image,profile) for image in images]

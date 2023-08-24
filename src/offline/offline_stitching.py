@@ -4,7 +4,7 @@ import cv2
 
 from models.superpoint import SuperPointMinimal
 from preprocessing.averaging import calculate_profile, apply_profile_to_image
-from configuration import configuration
+from configuration import global_configuration
 from matplotlib import pyplot as plt
 import pickle
 
@@ -21,8 +21,7 @@ class OfflineStitcher(object):
         self.output_directory = None
         self.working_title = None
         self.images = []
-        self.interest_point_data = []
-
+        self.raw_interest_point_file = None
 
     def set_input_directory(self, path: str):
         self.input_directory = path
@@ -34,20 +33,18 @@ class OfflineStitcher(object):
         self.working_title = working_title
 
     def load_images(self):
-        self.images = [cv2.imread(image_path,cv2.IMREAD_GRAYSCALE) for image_path in get_file_paths_with_extensions(self.input_directory, configuration.supported_file_extensions)]
+        self.images = [cv2.imread(image_path,cv2.IMREAD_GRAYSCALE) for image_path in get_file_paths_with_extensions(self.input_directory, global_configuration.supported_file_extensions)]
 
     def preprocess_images(self, smooth_steps: int = 0):
         average_profile = calculate_profile(self.images, smooth_steps)
         self.images = [apply_profile_to_image(image, average_profile) for image in self.images]
 
-    def compute_raw_interest_points_and_descriptors(self):
+    def compute_raw_interest_points_and_descriptors(self,path: str):
+        raw_interest_point_file = open(path, "wb+")
         for image in self.images:
-            scores, descriptors = self.superpoint(self.frame_to_tensor(image, configuration.device))
-            self.interest_point_data.append((image, scores.cpu().numpy(), descriptors.cpu().numpy()))
-
-    def save_raw_interest_points_and_descriptors(self, path: str):
-        with open(path,"w+") as file:
-            pickle.dump(self.interest_point_data,file)
+            scores, descriptors = self.superpoint(self.frame_to_tensor(image, global_configuration.device))
+            pickle.dump((image,scores.cpu().numpy(),descriptors.cpu().numpy()),raw_interest_point_file)
+        raw_interest_point_file.close()
 
     def load_raw_interest_points_and_descriptors(self, path: str):
         with open(path,"w+") as file:
