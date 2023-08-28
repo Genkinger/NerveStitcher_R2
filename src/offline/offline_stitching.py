@@ -99,9 +99,8 @@ class OfflineStitcher(object):
         self.matching_list = matching_list
 
     def match(self, index_a: int, index_b: int):
-        
-        sg_input = SuperGlueInput()
-        result = self.superglue(sg_input)
+        pass
+
 
 
     @staticmethod
