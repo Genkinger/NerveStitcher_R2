@@ -5,9 +5,9 @@ import numpy
 import torch
 from os import listdir
 from os.path import join, splitext, basename
-from .models.matching import Matching, MatchingInput, MatchingOutput
-from .models.superglue import SuperGlueConfig
-from .models.superpoint import SuperPointConfig
+from online.models.matching import Matching, MatchingInput, MatchingOutput
+from online.models.superglue import SuperGlueConfig
+from online.models.superpoint import SuperPointConfig
 from util.metrics import capture_timing_info
 from preprocessing.averaging import apply_profile_to_image, calculate_profile
 

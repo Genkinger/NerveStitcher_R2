@@ -46,7 +46,8 @@ import torch
 from torch import nn
 from dataclasses import dataclass
 from matplotlib import pyplot as plt
-
+from configuration import global_configuration
+from os.path import join
 
 def multi_layer_perceptron(channels: list, do_bn=True):
     """ Multi-layer perceptron """
@@ -134,12 +135,11 @@ class AttentionalGNN(nn.Module):
 
 @dataclass
 class SuperGlueConfig:
-    descriptor_dim: int = 256
     weights: str = 'indoor'
     keypoint_encoder: list[int] = dataclasses.field(default_factory=lambda: [32, 64, 128, 256])
     GNN_layers: list[str] = dataclasses.field(default_factory=lambda: ['self', 'cross'] * 9)
     sinkhorn_iterations: int = 100
-    match_threshold: float = 0.2
+    match_threshold: float = 0.80
 
 
 @dataclass
@@ -181,42 +181,35 @@ class SuperGlue(nn.Module):
     Networks. In CVPR, 2020. https://arxiv.org/abs/1911.11763
     """
 
-    def __init__(self, config: SuperGlueConfig):
+    def __init__(self, config: SuperGlueConfig = SuperGlueConfig(), descriptor_dimensions=global_configuration.superpoint.descriptor_dimensions):
         super().__init__()
         self.config = config
 
+        self.descriptor_dimensions = descriptor_dimensions
+
         self.kenc = KeypointEncoder(
-            self.config.descriptor_dim, self.config.keypoint_encoder)
+            self.descriptor_dimensions, self.config.keypoint_encoder)
 
         self.gnn = AttentionalGNN(
-            self.config.descriptor_dim, self.config.GNN_layers)
+            self.descriptor_dimensions, self.config.GNN_layers)
 
         self.final_proj = nn.Conv1d(
-            self.config.descriptor_dim, self.config.descriptor_dim,
+            self.descriptor_dimensions, self.descriptor_dimensions,
             kernel_size=1, bias=True)
 
         bin_score = torch.nn.Parameter(torch.tensor(1.))
         self.register_parameter('bin_score', bin_score)
 
-        assert self.config.weights in ['indoor']
-        path = Path(__file__).parent
-        path = path / 'weights/superglue_{}.pth'.format(self.config.weights)
+        #path = Path(__file__).parent
+        #path = path / f"weights/superglue_indoor.pth"
+        path = join(__file__,"..",f"weights/superglue_indoor.pth")
         self.load_state_dict(torch.load(str(path)))
-        print('Loaded SuperGlue model (\"{}\" weights)'.format(
-            self.config.weights))
+        print('Loaded SuperGlue')
 
     def forward(self, input: SuperGlueInput) -> SuperGlueOutput:
         """Run SuperGlue on a pair of keypoints and descriptors"""
         desc0, desc1 = input.descriptors0, input.descriptors1
         kpts0, kpts1 = input.keypoints0, input.keypoints1
-
-        #  NOTE(Leah): Maybe do this one layer higher not here
-        if kpts0.shape[1] == 0 or kpts1.shape[1] == 0:  # no keypoints
-            shape0, shape1 = kpts0.shape[:-1], kpts1.shape[:-1]
-            return SuperGlueOutput(matches0=kpts0.new_full(shape0, -1, dtype=torch.int),
-                                   matches1=kpts1.new_full(shape1, -1, dtype=torch.int),
-                                   matching_scores0=kpts0.new_zeros(shape0),
-                                   matching_scores1=kpts1.new_zeros(shape1))
 
         # Keypoint normalization.
         kpts0 = SuperGlue.normalize_keypoints(kpts0, input.image0.shape)
@@ -240,8 +233,6 @@ class SuperGlue(nn.Module):
         scores = SuperGlue.log_optimal_transport(
             scores, self.bin_score,
             iters=self.config.sinkhorn_iterations)
-
-        # Save to disk
 
         # Get the matches with score above "match_threshold".
         max0, max1 = scores[:, :-1, :-1].max(2), scores[:, :-1, :-1].max(1)

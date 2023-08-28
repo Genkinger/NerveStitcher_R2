@@ -1,36 +1,25 @@
 from offline_stitching import OfflineStitcher
 import sys
 from matplotlib import pyplot as plt
-import torch
-from util.metrics import print_metrics
-
-# def visualize(stitcher, index):
-#     image, scores, descriptors = stitcher.interest_point_data[index]
-#     plt.imshow(image,cmap="Greys_r")
-#     keypoints = torch.nonzero(torch.from_numpy(scores.squeeze()) > 0.005)
-#     keypoints = keypoints.transpose(0,1)
-#     plt.scatter(keypoints[1].numpy(),keypoints[0].numpy(),s=1,c="Red")
-#     plt.show()
-
+from configuration import global_configuration
+from code import interact
 
 stitcher = OfflineStitcher()
 
 # TODO(Leah): Does this potential API make any sense?
 # SuperPoint parts
-stitcher.set_input_directory(sys.argv[1])
-stitcher.set_output_directory(sys.argv[2])
-stitcher.set_working_title("A3")
-stitcher.load_images()
-stitcher.preprocess_images()
-stitcher.compute_raw_interest_points_and_descriptors(f"{sys.argv[2]}/raw_ip.pkl")
-#stitcher.save_raw_interest_points_and_descriptors("./points.pickle")
+stitcher.set_input_directory("../Datasets/EGT7_001-A_3_snp")
+stitcher.set_output_directory("../Datasets/EGT7_001-A_3_snp/Outputs")
+stitcher.set_working_title("first_superpoint_tests_preprocessed")
+#stitcher.load_superpoint()
+#stitcher.load_images()
+#stitcher.preprocess_images()
+#stitcher.compute_interest_points_and_descriptors(0.001, 1024)
+#stitcher.save_interest_point_data(f"data_0.001.{global_configuration.interest_point_data_file_extension}")
+stitcher.load_interest_point_data(f"data_0.001.{global_configuration.interest_point_data_file_extension}")
 
-print_metrics(True)
-
-#stitcher.load_raw_interest_points_and_descriptors("./points.pickle")
-#stitcher.save_raw_interest_points_and_descriptors("./Results/superpoint_checkpoint.pickle")
-#stitcher.load_raw_interest_points_and_descriptors("./Results/superpoint_checkpoint.pickle")
-#stitcher.filter_interest_points_and_descriptors()
+print(__file__)
+interact(local=locals())
 
 # SuperGlue parts
 # stitcher.set_matching_list([(1,2),(2,3)...])
