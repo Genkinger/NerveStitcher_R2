@@ -6,7 +6,8 @@ from configuration import global_configuration
 from code import interact
 import torch
 import numpy
-stitcher = OfflineStitcher()
+import cv2
+#stitcher = OfflineStitcher()
 
 
 def visualize(a,b,method=0):
@@ -63,18 +64,15 @@ def visualize(a,b,method=0):
 
 # TODO(Leah): Does this potential API make any sense?
 # SuperPoint parts
-stitcher.set_input_directory("../Datasets/EGT7_001-A_3_snp")
-stitcher.set_output_directory("../Datasets/EGT7_001-A_3_snp/Outputs")
-stitcher.set_working_title("first_superpoint_tests_preprocessed")
+#stitcher.set_input_directory("../Datasets/EGT7_001-A_3_snp")
+#stitcher.set_output_directory("../Datasets/EGT7_001-A_3_snp/Outputs")
+#stitcher.set_working_title("first_superpoint_tests_preprocessed")
 #stitcher.load_superpoint()
 #stitcher.load_images()
 #stitcher.preprocess_images()
 #stitcher.compute_interest_points_and_descriptors(0.001, 1024)
 #stitcher.save_interest_point_data(f"data_0.001.{global_configuration.interest_point_data_file_extension}")
-stitcher.load_interest_point_data(f"data_0.005.{global_configuration.interest_point_data_file_extension}")
-
-interact(local=locals())
-
+#stitcher.load_interest_point_data(f"data_0.005.{global_configuration.interest_point_data_file_extension}")
 
 
 
@@ -89,3 +87,28 @@ interact(local=locals())
 # stitcher.correct_artefacts()
 # stitcher.drop_artefacts()
 # stitcher.compose_final_image()
+
+
+def test_superpoint_image_pair_simple(image_file_path: str, angle_deg: float, scale: float, translation: tuple[float,float], keypoint_threshold: float = 0.005, max_keypoints: int = 1024, dot_distance: bool = False):
+        
+    image = cv2.imread(image_file_path,cv2.IMREAD_GRAYSCALE)
+    height, width = image.shape
+    rotation_matrix = cv2.getRotationMatrix2D((height/2,width/2),angle_deg, scale)
+    print(rotation_matrix)
+    #rotation_matrix = numpy.array([[numpy.cos(theta),-numpy.sin(theta),0],[numpy.sin(theta),numpy.cos(theta),0]])
+    warp_matrix = rotation_matrix + numpy.array([[0,0,translation[0]],[0,0,translation[1]]])
+    image_transformed = cv2.warpAffine(image, warp_matrix, (height,width))
+
+    #f,axes = plt.subplots(1,2)
+    #axes[0].imshow(image)
+    #axes[1].imshow(image_transformed)
+    #f.show()
+
+    stitcher = OfflineStitcher()
+    stitcher.load_superpoint()
+    stitcher.images = [image, image_transformed]
+    stitcher.compute_interest_points_and_descriptors(keypoint_threshold, max_keypoints)
+    visualize(stitcher.interest_point_data[0], stitcher.interest_point_data[1],method=0 if dot_distance else 1)
+
+test_superpoint_image_pair_simple("./test.tif",20,1,(0,0),0.002)
+interact(local=locals())
