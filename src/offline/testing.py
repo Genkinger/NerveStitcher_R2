@@ -10,15 +10,17 @@ import cv2
 #stitcher = OfflineStitcher()
 
 
-def visualize(a,b,method=0):
+def visualize(a,b,count,method=0):
+    
     image_a,scores_a,coordinates_a,descriptors_a = a
     image_b,scores_b,coordinates_b,descriptors_b = b
-    coordinates_a = coordinates_a.cpu().numpy()[:10]
-    coordinates_b = coordinates_b.cpu().numpy()[:10]
-    scores_a = scores_a.cpu().numpy()[:10]
-    scores_b = scores_b.cpu().numpy()[:10]
-    descriptors_a = descriptors_a.cpu().numpy()[:10]
-    descriptors_b = descriptors_b.cpu().numpy()[:10]
+    cnt = min(count,len(coordinates_a))
+    coordinates_a = coordinates_a.cpu().numpy()[:cnt]
+    coordinates_b = coordinates_b.cpu().numpy()[:cnt]
+    scores_a = scores_a.cpu().numpy()[:cnt]
+    scores_b = scores_b.cpu().numpy()[:cnt]
+    descriptors_a = descriptors_a.cpu().numpy()[:cnt]
+    descriptors_b = descriptors_b.cpu().numpy()[:cnt]
     
     #NOTE(Leah): This is only for testing stuff, use SuperGlue for correct results
     def dot_product_method(desc_a,desc_b):
@@ -56,7 +58,7 @@ def visualize(a,b,method=0):
     for i in range(len(closest_matches)):
         match_a = numpy.flip(coordinates_a[i])
         match_b = numpy.flip(coordinates_b[closest_matches[i]])
-        cp = ConnectionPatch(xyA=match_a,xyB=match_b,coordsA=axes[0].transData,coordsB=axes[1].transData,color="red",linewidth=0.4)
+        cp = ConnectionPatch(xyA=match_a,xyB=match_b,coordsA=axes[0].transData,coordsB=axes[1].transData,color="red",linewidth=0.8)
         f.add_artist(cp)
 
     f.show()
@@ -88,8 +90,10 @@ def visualize(a,b,method=0):
 # stitcher.drop_artefacts()
 # stitcher.compose_final_image()
 
+stitcher = OfflineStitcher()
+stitcher.load_superpoint()
 
-def test_superpoint_image_pair_simple(image_file_path: str, angle_deg: float, scale: float, translation: tuple[float,float], keypoint_threshold: float = 0.005, max_keypoints: int = 1024, dot_distance: bool = False):
+def test_superpoint_image_pair_simple(stitcher: OfflineStitcher,image_file_path: str, angle_deg: float, scale: float, translation: tuple[float,float], keypoint_threshold: float = 0.005, max_keypoints: int = 1024, dot_distance: bool = False):
         
     image = cv2.imread(image_file_path,cv2.IMREAD_GRAYSCALE)
     height, width = image.shape
@@ -103,12 +107,23 @@ def test_superpoint_image_pair_simple(image_file_path: str, angle_deg: float, sc
     #axes[0].imshow(image)
     #axes[1].imshow(image_transformed)
     #f.show()
-
-    stitcher = OfflineStitcher()
-    stitcher.load_superpoint()
+    
     stitcher.images = [image, image_transformed]
+    stitcher.interest_point_data = []
     stitcher.compute_interest_points_and_descriptors(keypoint_threshold, max_keypoints)
-    visualize(stitcher.interest_point_data[0], stitcher.interest_point_data[1],method=0 if dot_distance else 1)
+    visualize(stitcher.interest_point_data[0], stitcher.interest_point_data[1],max_keypoints,method=0 if dot_distance else 1)
+    return warp_matrix
 
-test_superpoint_image_pair_simple("./test.tif",20,1,(0,0),0.002)
+warp_matrix = test_superpoint_image_pair_simple(stitcher,"../Datasets/EGT7_A_3/EGT7_001-A_3_00002.tif",20,1,(0,0),0.002)
+
+def apply_matrix_to_keypoint_positions(position_matrix: numpy.ndarray, matrix: numpy.ndarray):
+    position_matrix = numpy.flip(position_matrix,axis=1)
+    position_matrix = numpy.insert(position_matrix,2,1,axis=1)
+    position_matrix = position_matrix.transpose()
+    result = numpy.matmul(matrix,position_matrix)
+    result = result.transpose()
+    result = numpy.flip(result,axis=1)
+    return result
+
+transformed_keypoints = apply_matrix_to_keypoint_positions(stitcher.interest_point_data[0][2].cpu().numpy(),warp_matrix)
 interact(local=locals())
